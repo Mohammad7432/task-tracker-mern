@@ -1,65 +1,91 @@
 const express = require('express');
 const router = express.Router();
-const Task = require('../models/Task');
+const mongoose = require('mongoose');
 
-// @desc    Get all tasks (with filtering & sorting)
+// ==========================================
+// DATABASE IN-FILE COLLECTIONS SCHEMATICS
+// ==========================================
+const TaskSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, 'Please add a task title'],
+    trim: true,
+    maxlength: [100, 'Title cannot be more than 100 characters']
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  priority: {
+    type: String,
+    enum: ['Low', 'Medium', 'High'],
+    default: 'Medium'
+  }
+}, { timestamps: true });
+
+// Prevent compiling errors if models reinitialize during live hot-reloads
+const Task = mongoose.models.Task || mongoose.model('Task', TaskSchema);
+
+// ==========================================
+// REST OPERATIONS ROUTING MANAGEMENT
+// ==========================================
+
+// @desc    Get all tasks (Handles filtering and sorting)
 router.get('/', async (req, res) => {
   try {
     let query = {};
-    
-    // Bonus Feature: Filtering
     if (req.query.status) query.status = req.query.status;
     if (req.query.priority) query.priority = req.query.priority;
 
-    let apiQuery = Task.find(query);
-
-    // Bonus Feature: Sorting (default to newest first)
-    if (req.query.sortBy) {
-      const sortParts = req.query.sortBy.split(':');
-      apiQuery = apiQuery.sort({ [sortParts[0]]: sortParts[1] === 'desc' ? -1 : 1 });
-    } else {
-      apiQuery = apiQuery.sort({ createdAt: -1 });
-    }
-
-    const tasks = await apiQuery;
-    res.status(200).json(tasks);
+    // Forces newly logged tasks directly up to the top of your layout dashboard
+    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    return res.status(200).json(tasks);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 });
 
-// @desc    Create a task
+// @desc    Create a new task record
 router.post('/', async (req, res) => {
   try {
     const newTask = await Task.create(req.body);
-    res.status(201).json(newTask);
+    return res.status(201).json(newTask);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 });
 
-// @desc    Update a task (FIXED: Uses req.params.id instead of req.id)
+// @desc    Update a task entry (FIXED PARAMS COMPLIANCE TARGET)
 router.put('/:id', async (req, res) => {
   try {
     const updatedTask = await Task.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
     });
-    if (!updatedTask) return res.status(404).json({ message: 'Task not found' });
-    res.status(200).json(updatedTask);
+    if (!updatedTask) {
+      return res.status(404).json({ message: 'Task record target could not be found.' });
+    }
+    return res.status(200).json(updatedTask);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 });
 
-// @desc    Delete a task
+// @desc    Delete a task entry completely from Atlas
 router.delete('/:id', async (req, res) => {
   try {
     const deletedTask = await Task.findByIdAndDelete(req.params.id);
-    if (!deletedTask) return res.status(404).json({ message: 'Task not found' });
-    res.status(200).json({ message: 'Task deleted successfully' });
+    if (!deletedTask) {
+      return res.status(404).json({ message: 'Task record target could not be found.' });
+    }
+    return res.status(200).json({ message: 'Task cleared from dataset.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 });
 
